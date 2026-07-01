@@ -1,0 +1,91 @@
+name: CI - ECR - Helm
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "charts/**"
+      - "argocd/**"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: mobile-banking-app
+  HELM_VALUES_FILE: charts/mobile-banking-app/values.yaml
+  FLUTTER_VERSION: "3.0.5"
+
+jobs:
+  test-build-push-update-helm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run tests
+        run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo "No test directory found, skipping flutter test."
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build --build-arg FLUTTER_VERSION=${{ env.FLUTTER_VERSION }} -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Update Helm image values
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          sed -i "s|repository: .*|repository: $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}|" ${{ env.HELM_VALUES_FILE }}
+          sed -i "s|tag: .*|tag: \"$IMAGE_TAG\"|" ${{ env.HELM_VALUES_FILE }}
+
+      - name: Commit and push Helm chart update
+        run: |
+          if git diff --quiet; then
+            echo "No Helm chart changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ env.HELM_VALUES_FILE }}
+          git commit -m "Update image tag to ${{ github.sha }}"
+          git push
