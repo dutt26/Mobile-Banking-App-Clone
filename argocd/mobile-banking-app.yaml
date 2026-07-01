@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mobile-banking-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Dipesh905/Mobile-Banking-App-Clone.git
+    targetRevision: main
+    path: charts/mobile-banking-app
+    helm:
+      releaseName: mobile-banking-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mobile-banking
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
