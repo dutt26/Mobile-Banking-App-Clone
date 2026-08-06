@@ -24,7 +24,7 @@ class LoginScreen extends StatelessWidget {
         elevation: 0,
         backgroundColor: Colors.white,
         title: const Text(
-          "Machhapunchchhre Bank Limited",
+          "G.S.Y.DUTT National Bank Limited",
           style: TextStyle(color: Colors.blue),
         ),
         actions: [
@@ -55,7 +55,7 @@ class LoginScreen extends StatelessWidget {
                     style: TextStyle(color: Colors.white, fontSize: 20),
                   ),
                   const Text(
-                    "MBL Bank Mobile Banking",
+                    "GSYDNBL Bank Mobile Banking",
                     style: TextStyle(color: Colors.white, fontSize: 20),
                   ),
                   const SizedBox(
