@@ -28,7 +28,7 @@ class HomeScreen extends StatelessWidget {
         elevation: 0,
         backgroundColor: Colors.white,
         title: const Text(
-          "Machhapunchchhre Bank Limited",
+          "G.S.Y.Dutt National Bank Limited",
           style: TextStyle(color: Colors.blue),
         ),
       ),
