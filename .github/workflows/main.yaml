@@ -40,30 +40,22 @@ jobs:
             .dart_tool
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
-  # ────────────────────────────────────────────────
-  # 2. Unit Testing (Flutter)
-  # ────────────────────────────────────────────────
-  unit-test:
-    name: Unit Tests
+  # ── Job 2: Unit Tests ──────────────────────────────────────────────────────
+  unit_tests:
+    name: Run Unit Tests
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
           channel: 'stable'
           cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
+      - run: flutter pub get
       - name: Run analyzer
         run: flutter analyze || true   # non-blocking lint pass; remove `|| true` to enforce
-
       - name: Run unit tests
         run: |
           if [ -d test ]; then
@@ -71,7 +63,6 @@ jobs:
           else
             echo "::warning::No 'test' directory found — skipping flutter test. Add tests under test/ to enable this check."
           fi
-
       - name: Upload coverage report
         if: hashFiles('coverage/lcov.info') != ''
         uses: actions/upload-artifact@v4
@@ -177,7 +168,7 @@ jobs:
   build-and-scan:
     name: Build & Container Vulnerability Scan
     runs-on: ubuntu-latest
-    needs: [unit-test, dependency-check, sast]
+    needs: [unit_tests, dependency-check, sast]
     permissions:
       security-events: write
       actions: read
@@ -276,7 +267,7 @@ jobs:
   push:
     name: Push to Docker Hub
     runs-on: ubuntu-latest
-    needs: [unit-test, dependency-check, sast, build-and-scan, smoke-test]
+    needs: [unit_tests, dependency-check, sast, build-and-scan, smoke-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
