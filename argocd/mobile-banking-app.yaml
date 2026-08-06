@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/Dipesh905/Mobile-Banking-App-Clone.git
+    repoURL: https://github.com/dutt26/Mobile-Banking-App-Clone.git
     targetRevision: main
     path: charts/mobile-banking-app
     helm:
