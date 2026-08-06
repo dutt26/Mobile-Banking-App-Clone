@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
- 
-// TODO: replace with the actual import for your app's root widget,
-// e.g. import 'package:mobile_banking_app_clone/main.dart';
- 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile_banking_app_clone/main.dart'; // adjust to your actual import
+
 void main() {
   testWidgets('App builds without crashing', (WidgetTester tester) async {
-    // Minimal placeholder test so `flutter test` has something to run.
-    // Replace MaterialApp/Scaffold below with your actual app widget,
-    // e.g.: await tester.pumpWidget(const MyApp());
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: Center(child: Text('lib/main.dart)')),
-        ),
+      const ProviderScope(
+        child: MyApp(),
       ),
     );
- 
-    expect(find.text('Placeholder'), findsOneWidget);
+    await tester.pump();
+
+    // No specific text/widget assertion — this test only confirms the
+    // widget tree builds and renders a first frame without throwing.
+    // Add real assertions here once you know which widgets should appear,
+    // e.g. expect(find.byType(Scaffold), findsWidgets);
   });
 }
