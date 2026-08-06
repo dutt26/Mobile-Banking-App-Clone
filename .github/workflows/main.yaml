@@ -109,6 +109,8 @@ jobs:
         run: flutter pub outdated --json > pub-outdated.json || true
 
       - name: Run OWASP Dependency-Check
+        id: dep-check
+        continue-on-error: true
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: 'mobile-banking-app-clone'
@@ -122,10 +124,16 @@ jobs:
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
 
       - name: Upload Dependency-Check results to Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: hashFiles('reports/dependency-check-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/dependency-check-report.sarif
+
+      - name: Fail job if scan produced no report
+        if: steps.dep-check.outcome == 'failure' && hashFiles('reports/dependency-check-report.sarif') == ''
+        run: |
+          echo "::error::Dependency-Check did not produce a report. Check the 'Run OWASP Dependency-Check' step logs above for the actual failure (NVD download, network, or config issue)."
+          exit 1
 
       - name: Upload raw reports
         if: always()
@@ -152,16 +160,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript   # CodeQL has no native Dart support; swap/add languages here
                                    # (e.g. 'java' if the repo has Android platform code)
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   # ────────────────────────────────────────────────
   # 5. Build & Container Vulnerability Scan
@@ -204,7 +212,7 @@ jobs:
 
       - name: Upload Trivy results to Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
 
