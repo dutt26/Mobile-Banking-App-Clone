@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/dutt26/Mobile-Banking-App-Clone.git
     targetRevision: main
-    path: apps/backend/
+    path: apps/backend_helm_charts/
     helm:
       releaseName: mobile-banking-app
   destination:
