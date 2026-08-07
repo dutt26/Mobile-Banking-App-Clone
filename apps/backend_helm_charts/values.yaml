@@ -1,0 +1,78 @@
+replicaCount: 2
+
+image:
+  repository: yashwanthdutt26/nodejsimage
+  tag: 514004d671d4e50af36df148ed5903e8e23c751d
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: backend-sa
+
+service:
+  type: NodePort
+  port: 3000
+  nodePort: 31111
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+startupProbe:
+  path: /
+  port: 3000
+  failureThreshold: 30
+  periodSeconds: 10
+
+readinessProbe:
+  path: /
+  port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3
+  successThreshold: 1
+
+livenessProbe:
+  path: /
+  port: 3000
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+  successThreshold: 1
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+config:
+  APP_ENV: production
+  LOG_LEVEL: INFO
+
+secret:
+  enabled: true
+  DATABASE_PASSWORD: Demo@123
+
+rbac:
+  create: true
+
+ingress:
+  enabled: false
+  className: alb
+  host: backend.example.com
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
