@@ -15,8 +15,9 @@ ENV PATH="/flutter/bin:/flutter/bin/cache/dart-sdk/bin:${PATH}"
 RUN flutter config --enable-web
 
 WORKDIR /app
-COPY pubspec.yaml pubspec.lock ./
-RUN flutter pub get
+COPY pubspec.yaml ./
+# Regenerate pubspec.lock in container to avoid version conflicts with repo's cached lock file
+RUN flutter pub get --verbose
 
 COPY . .
 RUN flutter build web --release
