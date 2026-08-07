@@ -1,0 +1,324 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/mobile-banking-app-clone
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ────────────────────────────────────────────────
+  # 1. Install Dependencies
+  # ────────────────────────────────────────────────
+  install:
+    name: Install Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            .dart_tool
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+  # ── Job 2: Unit Tests ──────────────────────────────────────────────────────
+  unit_tests:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+      - run: flutter pub get
+      - name: Run analyzer
+        run: flutter analyze || true   # non-blocking lint pass; remove `|| true` to enforce
+      - name: Run unit tests
+        run: |
+          if [ -d test ]; then
+            flutter test --coverage
+          else
+            echo "::warning::No 'test' directory found — skipping flutter test. Add tests under test/ to enable this check."
+          fi
+      - name: Upload coverage report
+        if: hashFiles('coverage/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+
+  # ────────────────────────────────────────────────
+  # 3. Dependency (SCA) Check — scans dependencies for
+  #    known-vulnerable packages
+  # ────────────────────────────────────────────────
+  dependency-check:
+    name: Dependency Vulnerability Check
+    runs-on: ubuntu-latest
+    needs: install
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check for outdated / vulnerable packages
+        run: flutter pub outdated --json > pub-outdated.json || true
+
+      - name: Run OWASP Dependency-Check
+        id: dep-check
+        continue-on-error: true
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'mobile-banking-app-clone'
+          path: '.'
+          format: 'SARIF'
+          out: 'reports'
+          args: >
+            --enableExperimental
+            --failOnCVSS 7
+            --disableAssembly
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+
+      - name: Upload Dependency-Check results to Security tab
+        if: hashFiles('reports/dependency-check-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+
+      - name: Fail job if scan produced no report
+        if: steps.dep-check.outcome == 'failure' && hashFiles('reports/dependency-check-report.sarif') == ''
+        run: |
+          echo "::error::Dependency-Check did not produce a report. Check the 'Run OWASP Dependency-Check' step logs above for the actual failure (NVD download, network, or config issue)."
+          exit 1
+
+      - name: Upload raw reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            reports/
+            pub-outdated.json
+
+  # ────────────────────────────────────────────────
+  # 4. SAST — CodeQL Static Analysis
+  # ────────────────────────────────────────────────
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    needs: install
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript   # CodeQL has no native Dart support; swap/add languages here
+                                   # (e.g. 'java' if the repo has Android platform code)
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+
+  # ────────────────────────────────────────────────
+  # 5. Build & Container Vulnerability Scan
+  # ────────────────────────────────────────────────
+  build-and-scan:
+    name: Build & Container Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: [unit_tests, dependency-check, sast]
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load locally for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy container vulnerability scan
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to Security tab
+        if: hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Save image as artifact for downstream jobs
+        run: docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} -o image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+          retention-days: 1
+
+  # ────────────────────────────────────────────────
+  # 6.5. Helm Chart Lint & Validation
+  # ────────────────────────────────────────────────
+  helm-lint:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+      
+      - name: Lint Helm chart
+        run: |
+          helm lint ./chart/mobile-banking-app
+      
+      - name: Template Helm chart with new image
+        run: |
+          helm template mobile-banking-app ./chart/mobile-banking-app \
+            --set image.repository=${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --output-dir /tmp/helm-output
+      
+      - name: Upload Helm manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-manifest
+          path: /tmp/helm-output
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: helm-lint
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load image
+        run: docker load -i image.tar
+
+      - name: Run container
+        run: |
+          docker run -d --name smoke-test -p 8080:80 ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          echo "Waiting for container to become healthy..."
+          sleep 5
+
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if curl -sf http://localhost:8080/ -o /dev/null; then
+              echo "Smoke test passed: app is responding."
+              exit 0
+            fi
+            echo "Attempt $i: not ready yet, retrying..."
+            sleep 3
+          done
+          echo "Smoke test failed: app did not respond in time."
+          docker logs smoke-test
+          exit 1
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs smoke-test
+
+      - name: Clean up container
+        if: always()
+        run: docker rm -f smoke-test || true
+
+  # ────────────────────────────────────────────────
+  # 7. Push to Docker Hub (only after everything passes)
+  # ────────────────────────────────────────────────
+  push:
+    name: Push to Docker Hub
+    runs-on: ubuntu-latest
+    needs: [unit_tests, dependency-check, sast, build-and-scan, smoke-test, helm-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
