@@ -5,18 +5,16 @@ import 'package:mobile_banking_app/main.dart';
 
 void main() {
   testWidgets('App builds without crashing', (WidgetTester tester) async {
-    // MyApp does not include its own ProviderScope — that wrapper lives in
-    // main.dart's runApp() call, so tests must add it explicitly here.
+    // Set device to a realistic mobile screen size (Pixel 5: 393×851)
+    // to avoid layout overflows in tests
+    addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+    tester.binding.window.physicalSizeTestValue = const Size(393, 851);
+
     await tester.pumpWidget(
       const ProviderScope(
         child: MyApp(),
       ),
     );
     await tester.pump();
-
-    // No specific text/widget assertion — this test only confirms the
-    // widget tree builds and renders a first frame without throwing.
-    // Add real assertions here once you know which widgets should appear,
-    // e.g. expect(find.byType(Scaffold), findsWidgets);
   });
 }
