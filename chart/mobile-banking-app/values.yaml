@@ -1,8 +1,8 @@
 replicaCount: 2
 
 image:
-  repository: replace-me
-  tag: replace-me
+  repository: yashwanthdutt26/mobile-banking-app-clone
+  tag: latest
   pullPolicy: IfNotPresent
 
 service:
