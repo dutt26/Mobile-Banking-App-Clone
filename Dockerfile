@@ -6,19 +6,30 @@ RUN apt-get update && apt-get install -y \
     git curl unzip xz-utils zip libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Flutter SDK
+# Install specific stable Flutter version (not master branch)
 WORKDIR /app
-RUN git clone --depth 1 https://github.com/flutter/flutter.git /flutter
+RUN git clone --branch 3.24.0 --depth 1 https://github.com/flutter/flutter.git /flutter || \
+    git clone --branch stable --depth 1 https://github.com/flutter/flutter.git /flutter
 ENV PATH="/flutter/bin:/flutter/bin/cache/dart-sdk/bin:${PATH}"
 
-# Pre-cache Flutter web platform
+# Verify Flutter installation
+RUN flutter --version && dart --version
+
+# Enable web platform
 RUN flutter config --enable-web
 
+# Copy and install dependencies
 WORKDIR /app
 COPY pubspec.yaml ./
-# Regenerate pubspec.lock in container to avoid version conflicts with repo's cached lock file
-RUN flutter pub get --verbose
 
+# If pubspec.lock exists in repo, remove it to force regeneration
+RUN rm -f pubspec.lock && flutter pub get 2>&1 || { \
+    echo "=== PUB GET FAILED ==="; \
+    flutter doctor -v; \
+    exit 1; \
+}
+
+# Copy remaining app code
 COPY . .
 RUN flutter build web --release
 
