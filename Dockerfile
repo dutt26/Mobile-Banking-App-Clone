@@ -1,5 +1,5 @@
-ARG FLUTTER_VERSION=3.0.5
-FROM ghcr.io/cirruslabs/flutter:${FLUTTER_VERSION} AS build
+ARG FLUTTER_VERSION=latest
+FROM cirruslabs/flutter:${FLUTTER_VERSION} AS build
 WORKDIR /app
 COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
