@@ -11,8 +11,9 @@ serviceAccount:
 
 service:
   type: NodePort
-  port: 3000
-  nodePort: 31111
+  port: 3000          # Service port exposed inside cluster
+  targetPort: 3000    # Port the application listens on in the container
+  nodePort: 31111     # Port exposed externally on cluster nodes
 
 resources:
   requests:
@@ -22,6 +23,7 @@ resources:
     cpu: 500m
     memory: 512Mi
 
+# Standardize health probe ports using the service targetPort or direct value
 startupProbe:
   path: /
   port: 3000
