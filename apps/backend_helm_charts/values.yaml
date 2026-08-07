@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: yashwanthdutt26/nodejsimage
+  repository: yashwanthdutt26/mobile-banking-app-clone
   tag: latest
   pullPolicy: IfNotPresent
 
